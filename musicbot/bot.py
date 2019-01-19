@@ -242,7 +242,7 @@ class MusicBot(discord.Client):
 
         return not sum(1 for m in vchannel.members if check(m))
 
-    async def _join_startup_channels(self, channels, *, autosummon=True):
+    async def _join_startup_channels(self, channels, *, autojoin=True):
         joined_servers = set()
         channel_map = {c.guild: c for c in channels}
 
@@ -261,7 +261,7 @@ class MusicBot(discord.Client):
                 log.info("Found resumable voice channel {0.guild.name}/{0.name}".format(guild.me.voice.channel))
                 channel_map[guild] = guild.me.voice.channel
 
-            if autosummon:
+            if autojoin:
                 owner = self._get_owner(server=guild, voice=True)
                 if owner:
                     log.info("Found owner in \"{}\"".format(owner.voice.channel.name))
@@ -422,7 +422,7 @@ class MusicBot(discord.Client):
                 if not create:
                     raise exceptions.CommandError(
                         'The bot is not in a voice channel.  '
-                        'Use %ssummon to summon it to your voice channel.' % self.config.command_prefix)
+                        'Use %sjoin to join it to your voice channel.' % self.config.command_prefix)
 
                 voice_client = await self.get_voice_client(channel)
 
@@ -1025,7 +1025,7 @@ class MusicBot(discord.Client):
             log.info("  Skip threshold: {} votes or {}%".format(
                 self.config.skips_required, fixg(self.config.skip_ratio_required * 100)))
             log.info("  Now Playing @mentions: " + ['Disabled', 'Enabled'][self.config.now_playing_mentions])
-            log.info("  Auto-Summon: " + ['Disabled', 'Enabled'][self.config.auto_summon])
+            log.info("  Auto-join: " + ['Disabled', 'Enabled'][self.config.auto_join])
             log.info("  Auto-Playlist: " + ['Disabled', 'Enabled'][self.config.auto_playlist] + " (order: " + ['sequential', 'random'][self.config.auto_playlist_random] + ")")
             log.info("  Auto-Pause: " + ['Disabled', 'Enabled'][self.config.auto_pause])
             log.info("  Delete Messages: " + ['Disabled', 'Enabled'][self.config.delete_messages])
@@ -1048,7 +1048,7 @@ class MusicBot(discord.Client):
         # maybe option to leave the ownerid blank and generate a random command for the owner to use
         # wait_for_message is pretty neato
 
-        await self._join_startup_channels(self.autojoin_channels, autosummon=self.config.auto_summon)
+        await self._join_startup_channels(self.autojoin_channels, autojoin=self.config.auto_join)
 
         # we do this after the config stuff because it's a lot easier to notice here
         if self.config.missing_keys:
@@ -1062,11 +1062,11 @@ class MusicBot(discord.Client):
     def _gen_embed(self):
         """Provides a basic template for embeds"""
         e = discord.Embed()
-        e.colour = 7506394
-        e.set_footer(text='Just-Some-Bots/MusicBot ({})'.format(BOTVERSION), icon_url='https://i.imgur.com/gFHBoZA.png')
-        e.set_author(name=self.user.name, url='https://github.com/Just-Some-Bots/MusicBot', icon_url=self.user.avatar_url)
+        e.set_author(name="Premium", url="")
+        e.colour = 16646513
+        e.set_footer(text='IG|Music'.format(BOTVERSION), icon_url='https://cdn.discordapp.com/attachments/535187638047473684/536286234335772705/14d6628c19b982a3b0ebc0d31cf4d9a0.png')
         return e
-
+		
     async def cmd_resetplaylist(self, player, channel):
         """
         Usage:
@@ -1077,50 +1077,22 @@ class MusicBot(discord.Client):
         player.autoplaylist = list(set(self.autoplaylist))
         return Response(self.str.get('cmd-resetplaylist-response', '\N{OK HAND SIGN}'), delete_after=15)
 
-    async def cmd_help(self, message, channel, command=None):
-        """
-        Usage:
-            {command_prefix}help [command]
+    async def cmd_help(self, message, channel):
+        return Response( """ ** 
+=join = Join voice Channel |
+=play <URL or name>= Adds The Song To Queue |
+=skip = Skips The Song |
+=pause = Pauses Song | 
+=resume = Resumes Song |
+=save = Saves Song To public Autoplaylist |
+=remove = Removes Most Recently Queued Song | 
+=clear = Removes Queued Songs | 
+=stream <stream url>= Plays Live Stream |
+=queue = Show Queued Songs |
+=stop = Disconnect From Voice Channel |
+**""")
 
-        Prints a help message.
-        If a command is specified, it prints a help message for that command.
-        Otherwise, it lists the available commands.
-        """
-        self.commands = []
-        self.is_all = False
-        prefix = self.config.command_prefix
-
-        if command:
-            if command.lower() == 'all':
-                self.is_all = True
-                await self.gen_cmd_list(message, list_all_cmds=True)
-
-            else:
-                cmd = getattr(self, 'cmd_' + command, None)
-                if cmd and not hasattr(cmd, 'dev_cmd'):
-                    return Response(
-                        "```\n{}```".format(
-                            dedent(cmd.__doc__)
-                        ).format(command_prefix=self.config.command_prefix),
-                        delete_after=60
-                    )
-                else:
-                    raise exceptions.CommandError(self.str.get('cmd-help-invalid', "No such command"), expire_in=10)
-
-        elif message.author.id == self.config.owner_id:
-            await self.gen_cmd_list(message, list_all_cmds=True)
-
-        else:
-            await self.gen_cmd_list(message)
-
-        desc = '```\n' + ', '.join(self.commands) + '\n```\n' + self.str.get(
-            'cmd-help-response', 'For information about a particular command, run `{}help [command]`\n'
-                                 'For further help, see https://just-some-bots.github.io/MusicBot/').format(prefix)
-        if not self.is_all:
-            desc += self.str.get('cmd-help-all', '\nOnly showing commands you can use, for a list of all commands, run `{}help all`').format(prefix)
-
-        return Response(desc, reply=True, delete_after=60)
-
+		
     async def cmd_blacklist(self, message, user_mentions, option, something):
         """
         Usage:
@@ -1821,16 +1793,16 @@ class MusicBot(discord.Client):
                 delete_after=30
             )
 
-    async def cmd_summon(self, channel, guild, author, voice_channel):
+    async def cmd_join(self, channel, guild, author, voice_channel):
         """
         Usage:
-            {command_prefix}summon
+            {command_prefix}join
 
-        Call the bot to the summoner's voice channel.
+        Call the bot to the joiner's voice channel.
         """
 
         if not author.voice:
-            raise exceptions.CommandError(self.str.get('cmd-summon-novc', 'You are not connected to voice. Try joining a voice channel!'))
+            raise exceptions.CommandError(self.str.get('cmd-join-novc', 'You are not connected to voice. Try joining a voice channel!'))
 
         voice_client = self.voice_client_in(guild)
         if voice_client and guild == author.voice.channel.guild:
@@ -1842,14 +1814,14 @@ class MusicBot(discord.Client):
             if not chperms.connect:
                 log.warning("Cannot join channel '{0}', no permission.".format(author.voice.channel.name))
                 raise exceptions.CommandError(
-                    self.str.get('cmd-summon-noperms-connect', "Cannot join channel `{0}`, no permission to connect.").format(author.voice.channel.name),
+                    self.str.get('cmd-join-noperms-connect', "Cannot join channel `{0}`, no permission to connect.").format(author.voice.channel.name),
                     expire_in=25
                 )
 
             elif not chperms.speak:
                 log.warning("Cannot join channel '{0}', no permission to speak.".format(author.voice.channel.name))
                 raise exceptions.CommandError(
-                    self.str.get('cmd-summon-noperms-speak', "Cannot join channel `{0}`, no permission to speak.").format(author.voice.channel.name),
+                    self.str.get('cmd-join-noperms-speak', "Cannot join channel `{0}`, no permission to speak.").format(author.voice.channel.name),
                     expire_in=25
                 )
 
@@ -1863,7 +1835,7 @@ class MusicBot(discord.Client):
 
         log.info("Joining {0.guild.name}/{0.name}".format(author.voice.channel))
 
-        return Response(self.str.get('cmd-summon-reply', 'Connected to `{0.name}`').format(author.voice.channel))
+        return Response(self.str.get('cmd-join-reply', 'Connected to `{0.name}`').format(author.voice.channel))
 
     async def cmd_pause(self, player):
         """
